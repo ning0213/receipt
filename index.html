@@ -122,7 +122,7 @@ window.addEventListener('load', function () {
     const canvas = document.getElementById(id);
     const rect = canvas.getBoundingClientRect();
     canvas.width = rect.width;
-    canvas.height = rect.height;
+    canvas.height = 200;
 
     const ctx = canvas.getContext('2d');
     let drawing = false;
@@ -255,9 +255,17 @@ function download(label) {
   ctx.fillText('簽收人簽名', bx+12, ry+28);
   ctx.fillText('交付人簽名', bx+12, gy+28);
 
-  // 貼簽名
-  ctx.drawImage(cReceiver, bx+8, ry+36, bw-16, bh-44);
-  ctx.drawImage(cGiver,    bx+8, gy+36, bw-16, bh-44);
+  // 貼簽名（保持原始比例）
+  function drawSig(src, destX, destY, destW, destH) {
+    const srcW = src.width, srcH = src.height;
+    const scale = Math.min(destW / srcW, destH / srcH);
+    const dw = srcW * scale, dh = srcH * scale;
+    const dx = destX + (destW - dw) / 2;
+    const dy = destY + (destH - dh) / 2;
+    ctx.drawImage(src, dx, dy, dw, dh);
+  }
+  drawSig(cReceiver, bx+8, ry+36, bw-16, bh-44);
+  drawSig(cGiver,    bx+8, gy+36, bw-16, bh-44);
 
   // 頁尾
   ctx.font = '18px sans-serif';
