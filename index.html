@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>宇德支票簽收單</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #f0ede8;
+  font-family: Georgia, '新細明體', serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 16px 40px;
+}
+.card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  width: 100%;
+  max-width: 640px;
+  padding: 32px 32px 24px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+}
+h1 { text-align: center; font-size: 22px; letter-spacing: 0.15em; color: #1a1a1a; margin-bottom: 4px; }
+.sub { text-align: center; font-size: 11px; letter-spacing: 0.25em; color: #aaa; padding-bottom: 16px; border-bottom: 1.5px solid #1a1a1a; margin-bottom: 24px; }
+table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+tr { border-bottom: 1px solid #eee; }
+tr:last-child { border-bottom: none; }
+td { padding: 10px 0; vertical-align: middle; }
+td.lbl { width: 90px; font-size: 14px; font-weight: bold; color: #444; white-space: nowrap; }
+td.val input {
+  width: 100%; border: none; border-bottom: 1px solid #ccc;
+  outline: none; font-size: 15px; padding: 4px 6px;
+  color: #1a1a1a; background: transparent; font-family: inherit;
+}
+.sig-wrap { margin-bottom: 16px; }
+.sig-label { font-size: 13px; font-weight: bold; color: #444; margin-bottom: 8px; letter-spacing: 0.05em; }
+.sig-canvas-wrap { position: relative; width: 100%; }
+canvas {
+  display: block;
+  width: 100%;
+  height: 160px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background: #fafafa;
+  cursor: crosshair;
+  touch-action: none;
+}
+.btn-clear {
+  font-size: 11px; color: #999; background: none; border: none;
+  cursor: pointer; text-decoration: underline; margin-top: 4px; float: right;
+}
+.btns {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 12px; width: 100%; max-width: 640px; margin: 16px auto 0;
+}
+button.dl {
+  padding: 14px; border: none; border-radius: 4px;
+  font-size: 14px; font-family: inherit; letter-spacing: 0.1em;
+  cursor: pointer; color: #fff;
+}
+button.dl.a { background: #1a1a1a; }
+button.dl.b { background: #555; }
+.note { text-align: center; font-size: 11px; color: #bbb; margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>宇德支票簽收單</h1>
+  <div class="sub">CHECK RECEIPT</div>
+
+  <table>
+    <tr>
+      <td class="lbl">日　　期</td>
+      <td class="val"><input type="date" id="f-date"></td>
+    </tr>
+    <tr>
+      <td class="lbl">支票號碼</td>
+      <td class="val"><input type="text" id="f-check" placeholder="輸入支票號碼"></td>
+    </tr>
+    <tr>
+      <td class="lbl">金　　額</td>
+      <td class="val"><input type="text" id="f-amount" placeholder="NT$"></td>
+    </tr>
+  </table>
+
+  <div class="sig-wrap">
+    <div class="sig-label">簽收人簽名</div>
+    <div class="sig-canvas-wrap">
+      <canvas id="c-receiver"></canvas>
+    </div>
+    <button class="btn-clear" onclick="clearSig('c-receiver')">清除</button>
+    <div style="clear:both"></div>
+  </div>
+
+  <div class="sig-wrap">
+    <div class="sig-label">交付人簽名</div>
+    <div class="sig-canvas-wrap">
+      <canvas id="c-giver"></canvas>
+    </div>
+    <button class="btn-clear" onclick="clearSig('c-giver')">清除</button>
+    <div style="clear:both"></div>
+  </div>
+</div>
+
+<div class="btns">
+  <button class="dl a" onclick="download('簽收人留存')">下載　簽收人留存</button>
+  <button class="dl b" onclick="download('交付人留存')">下載　交付人留存</button>
+</div>
+<div class="note">簽完後分別下載兩份，各執一聯為憑</div>
+
+<script>
+// 等 DOM 完全載入後再初始化
+window.addEventListener('load', function () {
+
+  // 把 canvas 的實際像素設成顯示大小，避免座標偏移
+  function initCanvas(id) {
+    const canvas = document.getElementById(id);
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+
+    const ctx = canvas.getContext('2d');
+    let drawing = false;
+    let lx = 0, ly = 0;
+
+    function pos(e) {
+      const r = canvas.getBoundingClientRect();
+      if (e.touches) {
+        return { x: e.touches[0].clientX - r.left, y: e.touches[0].clientY - r.top };
+      }
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    }
+
+    canvas.addEventListener('mousedown', function(e) {
+      drawing = true;
+      const p = pos(e); lx = p.x; ly = p.y;
+    });
+    canvas.addEventListener('mousemove', function(e) {
+      if (!drawing) return;
+      const p = pos(e);
+      ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(p.x, p.y);
+      ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
+      lx = p.x; ly = p.y;
+    });
+    canvas.addEventListener('mouseup', function() { drawing = false; });
+    canvas.addEventListener('mouseleave', function() { drawing = false; });
+
+    canvas.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      drawing = true;
+      const p = pos(e); lx = p.x; ly = p.y;
+    }, { passive: false });
+    canvas.addEventListener('touchmove', function(e) {
+      e.preventDefault();
+      if (!drawing) return;
+      const p = pos(e);
+      ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(p.x, p.y);
+      ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
+      lx = p.x; ly = p.y;
+    }, { passive: false });
+    canvas.addEventListener('touchend', function() { drawing = false; });
+  }
+
+  initCanvas('c-receiver');
+  initCanvas('c-giver');
+
+  // 今天日期
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  document.getElementById('f-date').value = `${y}-${m}-${day}`;
+});
+
+function clearSig(id) {
+  const c = document.getElementById(id);
+  c.getContext('2d').clearRect(0, 0, c.width, c.height);
+}
+
+function download(label) {
+  const dateVal   = document.getElementById('f-date').value || '';
+  const checkVal  = document.getElementById('f-check').value || '';
+  const amountVal = document.getElementById('f-amount').value || '';
+  const cReceiver = document.getElementById('c-receiver');
+  const cGiver    = document.getElementById('c-giver');
+
+  const W = 1200, H = 900;
+  const off = document.createElement('canvas');
+  off.width = W; off.height = H;
+  const ctx = off.getContext('2d');
+
+  // 背景
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+
+  // 標題
+  ctx.fillStyle = '#1a1a1a';
+  ctx.font = 'bold 52px serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('宇德支票簽收單', W/2, 72);
+
+  ctx.font = '20px sans-serif';
+  ctx.fillStyle = '#aaa';
+  ctx.fillText('CHECK RECEIPT', W/2, 100);
+
+  // 留存標籤
+  ctx.fillStyle = '#f0ede8';
+  ctx.beginPath();
+  ctx.roundRect(W-220, 42, 180, 40, 6);
+  ctx.fill();
+  ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.fillStyle = '#666';
+  ctx.font = '18px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(label, W-130, 68);
+
+  // 分隔線
+  ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(60, 116); ctx.lineTo(W-60, 116); ctx.stroke();
+
+  // 欄位
+  const fields = [['日　　期', dateVal], ['支票號碼', checkVal], ['金　　額', amountVal]];
+  let y = 172;
+  fields.forEach(([lbl, val]) => {
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 26px sans-serif';
+    ctx.fillStyle = '#444';
+    ctx.fillText(lbl, 80, y);
+    ctx.font = '28px sans-serif';
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillText(val, 260, y);
+    ctx.strokeStyle = '#eee'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(80, y+16); ctx.lineTo(W-80, y+16); ctx.stroke();
+    y += 80;
+  });
+
+  // 簽名框 — 上下排列
+  const bx = 80, bw = W-160, bh = 160;
+  const ry = y + 20;
+  const gy = ry + bh + 30;
+
+  ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1.5;
+  ctx.strokeRect(bx, ry, bw, bh);
+  ctx.strokeRect(bx, gy, bw, bh);
+
+  ctx.font = 'bold 22px sans-serif';
+  ctx.fillStyle = '#444';
+  ctx.textAlign = 'left';
+  ctx.fillText('簽收人簽名', bx+12, ry+28);
+  ctx.fillText('交付人簽名', bx+12, gy+28);
+
+  // 貼簽名
+  ctx.drawImage(cReceiver, bx+8, ry+36, bw-16, bh-44);
+  ctx.drawImage(cGiver,    bx+8, gy+36, bw-16, bh-44);
+
+  // 頁尾
+  ctx.font = '18px sans-serif';
+  ctx.fillStyle = '#bbb';
+  ctx.textAlign = 'center';
+  ctx.fillText('本單據一式兩聯，交付人及簽收人各執一聯為憑', W/2, H-24);
+
+  const a = document.createElement('a');
+  a.download = `宇德支票簽收單_${label}.png`;
+  a.href = off.toDataURL('image/png');
+  a.click();
+}
+</script>
+</body>
+</html>
